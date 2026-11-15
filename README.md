@@ -19,6 +19,8 @@ One window is visible at a time, it fills the screen, and a shortcut brings each
 | Shortcut | Action | Handled by |
 | --- | --- | --- |
 | Alt+1 | Focus WezTerm, launching it if it is not running | Vicinae |
+| Alt+2 | Focus Zen Browser, launching it if it is not running | Vicinae |
+| Alt+3 | Focus Cursor, launching it if it is not running | Vicinae |
 | Alt+Space | Open the Vicinae launcher | Vicinae |
 | Alt+Shift+J / Alt+Shift+K | Cycle through the windows on the screen | Amethyst |
 

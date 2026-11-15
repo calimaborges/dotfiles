@@ -4,6 +4,12 @@
 			"entrypoints": {
 				"com.github.wez.wezterm": {
 					"shortcut": "alt+1"
+				},
+				"app.zen-browser.zen": {
+					"shortcut": "alt+2"
+				},
+				"com.todesktop.230313mzl4w4u92": {
+					"shortcut": "alt+3"
 				}
 			}
 		}
