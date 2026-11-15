@@ -9,16 +9,38 @@ chezmoi runs in symlink mode: each managed file in `$HOME` is a symlink into thi
 | File in `$HOME` | File in this repository |
 | --- | --- |
 | `~/.config/wezterm/wezterm.lua` | `dot_config/wezterm/wezterm.lua` |
+| `~/.config/vicinae/shared.json` | `dot_config/vicinae/shared.json` |
+| `~/.config/amethyst/amethyst.yml` (macOS only) | `dot_config/amethyst/amethyst.yml` |
+
+## Keyboard workflow
+
+One window is visible at a time, it fills the screen, and a shortcut brings each app to the front.
+
+| Shortcut | Action | Handled by |
+| --- | --- | --- |
+| Alt+1 | Focus WezTerm, launching it if it is not running | Vicinae |
+| Alt+Space | Open the Vicinae launcher | Vicinae |
+| Alt+Shift+J / Alt+Shift+K | Cycle through the windows on the screen | Amethyst |
+
+On macOS, [Vicinae](https://docs.vicinae.com) owns the app shortcuts and [Amethyst](https://ianyh.com/amethyst/) keeps every window at full screen size with its `fullscreen` layout. The app shortcuts are set up for macOS only so far.
+
+To give another app a shortcut, add its entry to `dot_config/vicinae/shared.json`. Vicinae reloads the file on save. List the app IDs with:
+
+```sh
+vicinae cmd ls | grep applications
+```
+
+Vicinae rewrites `~/.config/vicinae/settings.json` whenever a setting changes in its window, and in doing so replaces a symlink with a regular file. For that reason chezmoi only creates `settings.json` once, with an import of `shared.json`, and never touches it again. Settings changed in the Vicinae window stay on that computer; settings meant for every computer go in `shared.json`.
 
 ## Set up a computer
 
 1. Install chezmoi, WezTerm, and the font the WezTerm config uses.
 
-   macOS:
+   macOS, including Vicinae and Amethyst:
 
    ```sh
    brew install chezmoi
-   brew install --cask wezterm font-fantasque-sans-mono-nerd-font
+   brew install --cask wezterm vicinae amethyst font-fantasque-sans-mono-nerd-font
    ```
 
    Arch Linux:
@@ -43,6 +65,18 @@ chezmoi runs in symlink mode: each managed file in `$HOME` is a symlink into thi
    chezmoi init calimaborges
    chezmoi diff
    chezmoi apply
+   ```
+
+3. On macOS, start Vicinae and Amethyst.
+
+   1. Open both apps and allow each one under System Settings > Privacy & Security > Accessibility.
+   2. Quit and reopen Amethyst. It does not manage windows until it is restarted with the permission in place.
+   3. Add Amethyst under System Settings > General > Login Items. Vicinae registers itself.
+
+   If Vicinae was opened before step 2, `~/.config/vicinae/settings.json` already exists and chezmoi leaves it alone. Add the import by hand:
+
+   ```json
+   "imports": ["./shared.json"]
    ```
 
 The repository is cloned over HTTPS into `~/.local/share/chezmoi`. To push changes from that computer, add `--ssh` to `chezmoi init` once the computer has a GitHub SSH key.
