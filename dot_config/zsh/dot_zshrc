@@ -1,0 +1,37 @@
+# History: large, shared across sessions, written as you go.
+# Atuin owns interactive search (Up / Ctrl-R); this remains the fallback store.
+HISTFILE="${HOME}/.zsh_history"
+HISTSIZE=100000
+SAVEHIST=100000
+
+setopt SHARE_HISTORY
+setopt INC_APPEND_HISTORY_TIME
+setopt EXTENDED_HISTORY
+setopt HIST_IGNORE_DUPS
+setopt HIST_IGNORE_SPACE
+setopt HIST_REDUCE_BLANKS
+setopt HIST_VERIFY
+
+autoload -Uz compinit
+compinit
+
+bindkey -e
+
+source "${ZDOTDIR}/aliases.zsh"
+source "${ZDOTDIR}/git.zsh"
+
+autoload -Uz vcs_info
+zstyle ':vcs_info:*' enable git
+zstyle ':vcs_info:git:*' formats ' (%b)'
+zstyle ':vcs_info:git:*' actionformats ' (%b|%a)'
+
+precmd() {
+  vcs_info
+}
+
+setopt PROMPT_SUBST
+PROMPT='%F{cyan}%~%f%F{yellow}${vcs_info_msg_0_}%f %# '
+
+if command -v atuin >/dev/null 2>&1; then
+  eval "$(atuin init zsh)"
+fi

@@ -8,9 +8,17 @@ chezmoi runs in symlink mode: each managed file in `$HOME` is a symlink into thi
 
 | File in `$HOME` | File in this repository |
 | --- | --- |
+| `~/.zshenv` | `dot_zshenv` |
+| `~/.config/zsh/.zshrc` | `dot_config/zsh/dot_zshrc` |
+| `~/.config/zsh/.zprofile` | `dot_config/zsh/dot_zprofile` |
+| `~/.config/zsh/aliases.zsh` | `dot_config/zsh/aliases.zsh` |
+| `~/.config/zsh/git.zsh` | `dot_config/zsh/git.zsh` |
+| `~/.config/atuin/config.toml` | `dot_config/atuin/config.toml` |
 | `~/.config/wezterm/wezterm.lua` | `dot_config/wezterm/wezterm.lua` |
 | `~/.config/vicinae/shared.json` | `dot_config/vicinae/shared.json` |
 | `~/.config/amethyst/amethyst.yml` (macOS only) | `dot_config/amethyst/amethyst.yml` |
+
+Zsh config lives under `~/.config/zsh` via `ZDOTDIR`. The only zsh file that must stay in `$HOME` is `~/.zshenv`, which sets `ZDOTDIR` before the rest of the startup files load. After apply, remove any leftover `~/.zshrc` and the old `~/.config/zsh` → neoarch symlink if they still exist.
 
 ## Keyboard workflow
 
@@ -36,19 +44,19 @@ Vicinae rewrites `~/.config/vicinae/settings.json` whenever a setting changes in
 
 ## Set up a computer
 
-1. Install chezmoi, WezTerm, and the font the WezTerm config uses.
+1. Install chezmoi, WezTerm, Atuin (directory-aware shell history), and the font the WezTerm config uses.
 
    macOS, including Vicinae and Amethyst:
 
    ```sh
-   brew install chezmoi
+   brew install chezmoi atuin
    brew install --cask wezterm vicinae amethyst font-fantasque-sans-mono-nerd-font
    ```
 
    Arch Linux:
 
    ```sh
-   sudo pacman -S chezmoi wezterm ttf-fantasque-nerd
+   sudo pacman -S chezmoi wezterm atuin ttf-fantasque-nerd
    ```
 
    Other Linux distributions: follow the install pages for [chezmoi](https://www.chezmoi.io/install/) and [WezTerm](https://wezterm.org/install/linux.html), then install FantasqueSansM from [Nerd Fonts](https://www.nerdfonts.com/font-downloads).
@@ -69,7 +77,24 @@ Vicinae rewrites `~/.config/vicinae/settings.json` whenever a setting changes in
    chezmoi apply
    ```
 
-3. On macOS, start Vicinae and Amethyst.
+3. On macOS, start the Atuin daemon so history search stays fast:
+
+   ```sh
+   brew services start atuin
+   ```
+
+   On Linux, enable the packaged Atuin service if your distribution provides one, or run `atuin daemon start`.
+
+   Optional: import an existing shell history once, then start a new shell:
+
+   ```sh
+   atuin import zsh
+   exec zsh
+   ```
+
+   Atuin records history and owns Ctrl-R (compact search: workspace → directory → global → session). Up arrow stays on normal zsh history so it cycles one command at a time. Enter pastes the selected command for editing before you run it.
+
+4. On macOS, start Vicinae and Amethyst.
 
    1. Open both apps and allow each one under System Settings > Privacy & Security > Accessibility.
    2. Quit and reopen Amethyst. It does not manage windows until it is restarted with the permission in place.
