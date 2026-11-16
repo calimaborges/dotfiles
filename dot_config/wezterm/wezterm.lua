@@ -4,8 +4,6 @@ local config = wezterm.config_builder()
 
 local is_macos = wezterm.target_triple:find("darwin") ~= nil
 
-config.color_scheme = "Tokyo Night (Gogh)"
-
 config.font = wezterm.font("FantasqueSansM Nerd Font")
 config.font_size = is_macos and 15.0 or 11.0
 config.harfbuzz_features = { "calt=0", "clig=0", "liga=0" }
