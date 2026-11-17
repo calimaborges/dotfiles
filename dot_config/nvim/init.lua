@@ -59,6 +59,7 @@ vim.pack.add({
 	"https://github.com/tpope/vim-fugitive", -- git integration
 	{ src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "main" }, -- parser manager
 	"https://github.com/folke/which-key.nvim", -- key hints popup
+	"https://github.com/windwp/nvim-autopairs", -- auto-close brackets/quotes
 }, { confirm = false }) -- install without prompting
 
 vim.cmd.packadd("nvim.undotree") -- built-in undo tree viewer
@@ -69,6 +70,8 @@ require("which-key").setup({
 		{ "<leader>g", group = "git" },
 	},
 })
+
+require("nvim-autopairs").setup({})
 
 -- Treesitter
 require("nvim-treesitter").install({ -- no-op for parsers already installed

@@ -32,6 +32,10 @@ precmd() {
 setopt PROMPT_SUBST
 PROMPT='%F{cyan}%~%f%F{yellow}${vcs_info_msg_0_}%f %# '
 
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate zsh)"
+fi
+
 if command -v atuin >/dev/null 2>&1; then
   eval "$(atuin init zsh)"
 fi

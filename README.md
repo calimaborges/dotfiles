@@ -47,22 +47,22 @@ Vicinae rewrites `~/.config/vicinae/settings.json` whenever a setting changes in
 
 ## Set up a computer
 
-1. Install chezmoi, WezTerm, Atuin (directory-aware shell history), Neovim, the tree-sitter CLI and a C compiler (nvim-treesitter builds its parsers with them), and the font the WezTerm config uses.
+1. Install chezmoi, WezTerm, Atuin (directory-aware shell history), mise (runtime and tool versions), Neovim, the tree-sitter CLI and a C compiler (nvim-treesitter builds its parsers with them), and the font the WezTerm config uses.
 
    macOS, including Vicinae and Amethyst:
 
    ```sh
-   brew install chezmoi atuin neovim tree-sitter-cli
+   brew install chezmoi atuin mise neovim tree-sitter-cli
    brew install --cask wezterm vicinae amethyst font-fantasque-sans-mono-nerd-font
    ```
 
    Arch Linux:
 
    ```sh
-   sudo pacman -S chezmoi wezterm atuin neovim tree-sitter-cli base-devel ttf-fantasque-nerd
+   sudo pacman -S chezmoi wezterm atuin mise neovim tree-sitter-cli base-devel ttf-fantasque-nerd
    ```
 
-   Other Linux distributions: follow the install pages for [chezmoi](https://www.chezmoi.io/install/) and [WezTerm](https://wezterm.org/install/linux.html), then install FantasqueSansM from [Nerd Fonts](https://www.nerdfonts.com/font-downloads).
+   Other Linux distributions: follow the install pages for [chezmoi](https://www.chezmoi.io/install/), [WezTerm](https://wezterm.org/install/linux.html), and [mise](https://mise.jdx.dev/installing-mise.html), then install FantasqueSansM from [Nerd Fonts](https://www.nerdfonts.com/font-downloads).
 
 2. Clone this repository and link the dotfiles.
 
@@ -78,6 +78,13 @@ Vicinae rewrites `~/.config/vicinae/settings.json` whenever a setting changes in
    chezmoi init calimaborges
    chezmoi diff
    chezmoi apply
+   ```
+
+   New zsh sessions run `mise activate`. Install the tools from your mise config, then start a new shell:
+
+   ```sh
+   mise install
+   exec zsh
    ```
 
 3. On macOS, start the Atuin daemon so history search stays fast:
