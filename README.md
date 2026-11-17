@@ -15,10 +15,13 @@ chezmoi runs in symlink mode: each managed file in `$HOME` is a symlink into thi
 | `~/.config/zsh/git.zsh` | `dot_config/zsh/git.zsh` |
 | `~/.config/atuin/config.toml` | `dot_config/atuin/config.toml` |
 | `~/.config/wezterm/wezterm.lua` | `dot_config/wezterm/wezterm.lua` |
+| `~/.config/nvim/init.lua` | `dot_config/nvim/init.lua` |
 | `~/.config/vicinae/shared.json` | `dot_config/vicinae/shared.json` |
 | `~/.config/amethyst/amethyst.yml` (macOS only) | `dot_config/amethyst/amethyst.yml` |
 
 Zsh config lives under `~/.config/zsh` via `ZDOTDIR`. The only zsh file that must stay in `$HOME` is `~/.zshenv`, which sets `ZDOTDIR` before the rest of the startup files load. After apply, remove any leftover `~/.zshrc` and the old `~/.config/zsh` → neoarch symlink if they still exist.
+
+Git config is not managed here yet. Keep `~/.config/git` on each machine until that is set up later.
 
 ## Keyboard workflow
 
@@ -44,19 +47,19 @@ Vicinae rewrites `~/.config/vicinae/settings.json` whenever a setting changes in
 
 ## Set up a computer
 
-1. Install chezmoi, WezTerm, Atuin (directory-aware shell history), and the font the WezTerm config uses.
+1. Install chezmoi, WezTerm, Atuin (directory-aware shell history), Neovim, the tree-sitter CLI and a C compiler (nvim-treesitter builds its parsers with them), and the font the WezTerm config uses.
 
    macOS, including Vicinae and Amethyst:
 
    ```sh
-   brew install chezmoi atuin
+   brew install chezmoi atuin neovim tree-sitter-cli
    brew install --cask wezterm vicinae amethyst font-fantasque-sans-mono-nerd-font
    ```
 
    Arch Linux:
 
    ```sh
-   sudo pacman -S chezmoi wezterm atuin ttf-fantasque-nerd
+   sudo pacman -S chezmoi wezterm atuin neovim tree-sitter-cli base-devel ttf-fantasque-nerd
    ```
 
    Other Linux distributions: follow the install pages for [chezmoi](https://www.chezmoi.io/install/) and [WezTerm](https://wezterm.org/install/linux.html), then install FantasqueSansM from [Nerd Fonts](https://www.nerdfonts.com/font-downloads).
