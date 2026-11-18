@@ -45,6 +45,19 @@ vicinae cmd ls | grep applications
 
 Vicinae rewrites `~/.config/vicinae/settings.json` whenever a setting changes in its window, and in doing so replaces a symlink with a regular file. For that reason chezmoi only creates `settings.json` once, with an import of `shared.json`, and never touches it again. Settings changed in the Vicinae window stay on that computer; settings meant for every computer go in `shared.json`.
 
+## WezTerm sessions
+
+WezTerm does the job tmux used to do. Each project gets its own session, a WezTerm workspace named `<context>/<project>` after its directory in `~/projects/<context>/<project>`. Every new tab in a session opens in that project's directory, wherever the current pane has moved to. Outside a project session, a new tab opens in the current pane's directory.
+
+The tab bar is always visible and shows the current session's name in green on the right. Outside a project session it reads `default`.
+
+| Shortcut | Action |
+| --- | --- |
+| Cmd+O (Super+O on Linux) | Fuzzy-find a project and switch to its session, creating the session if it is not open. Same key as `s-o` in Emacs |
+| Cmd+J (Super+J on Linux) | Pick among the open sessions. Same key as `s-j` in Emacs |
+| Ctrl+1 .. Ctrl+9 | Switch to an open session by number. Sessions are numbered in the order they were opened, so `default` is 1, and Cmd+J shows each number |
+| Cmd+T or Ctrl+Shift+T | Open a tab in the session's project directory |
+
 ## Set up a computer
 
 1. Install chezmoi, WezTerm, Atuin (directory-aware shell history), mise (runtime and tool versions), Neovim, the tree-sitter CLI and a C compiler (nvim-treesitter builds its parsers with them), and the font the WezTerm config uses.
