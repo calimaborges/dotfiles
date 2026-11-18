@@ -19,6 +19,7 @@ bindkey -e
 
 source "${ZDOTDIR}/aliases.zsh"
 source "${ZDOTDIR}/git.zsh"
+source "${ZDOTDIR}/journal.zsh"
 
 autoload -Uz vcs_info
 zstyle ':vcs_info:*' enable git

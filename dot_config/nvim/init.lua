@@ -10,7 +10,9 @@ option.relativenumber = true -- relative numbers elsewhere
 option.cursorline = true     -- highlight current line
 option.signcolumn = "yes"    -- avoid text shifting when signs appear
 option.scrolloff = 8         -- context lines around cursor
-option.wrap = false          -- scroll sideways instead of wrapping
+option.wrap = true           -- wrap long lines visually
+option.linebreak = true      -- wrap at word boundaries
+option.breakindent = true    -- keep indent on wrapped lines
 option.termguicolors = true  -- 24-bit colors
 
 -- Indentation
