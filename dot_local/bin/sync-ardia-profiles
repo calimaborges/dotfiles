@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+COLORS = {"plum", "blue", "purple", "pink", "red", "orange", "yellow", "green", "neutral"}
+PROFILE_KEYS = {
+    "name",
+    "color",
+    "icon",
+    "theme",
+    "shareTopApps",
+    "syncTabs",
+    "pinnedCollapsed",
+    "shareDataWith",
+    "default",
+}
+UPDATE_KEYS = ("icon", "shareTopApps", "syncTabs", "pinnedCollapsed")
+
+
+class ArdiaError(Exception):
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+
+
+def fail(message, status=1):
+    print(message, file=sys.stderr)
+    raise SystemExit(status)
+
+
+def ardia_binary():
+    found = shutil.which("ardia")
+    if found:
+        return found
+    fallback = Path.home() / ".local" / "bin" / "ardia"
+    if os.access(fallback, os.X_OK):
+        return str(fallback)
+    fail("ardia is not on PATH")
+
+
+def manifest_path(explicit):
+    if explicit:
+        return Path(explicit)
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return config_home / "ardia" / "profiles.json"
+
+
+def load_manifest(path):
+    try:
+        data = json.loads(path.read_text())
+    except FileNotFoundError:
+        fail(f"profile manifest not found: {path}")
+    except json.JSONDecodeError as error:
+        fail(f"{path}: {error}")
+    if not isinstance(data, dict) or set(data) != {"profiles"}:
+        fail(f"{path}: expected an object with a profiles list")
+    profiles = data["profiles"]
+    if not isinstance(profiles, list) or not profiles:
+        fail(f"{path}: profiles must be a non-empty list")
+    names = []
+    default_count = 0
+    for index, profile in enumerate(profiles):
+        label = f"{path}: profiles[{index}]"
+        if not isinstance(profile, dict):
+            fail(f"{label} must be an object")
+        unknown = sorted(set(profile) - PROFILE_KEYS)
+        if unknown:
+            fail(f"{label} has unknown keys: {', '.join(unknown)}")
+        name = profile.get("name")
+        if not isinstance(name, str) or not name.strip() or name != name.strip():
+            fail(f"{label}.name must be a non-empty string")
+        if name in names:
+            fail(f"{path}: duplicate profile name {name}")
+        names.append(name)
+        if "color" in profile and profile["color"] not in COLORS:
+            fail(f"{path}: {name} has an unknown color")
+        icon = profile.get("icon", "")
+        if "icon" in profile and icon is not None and (not isinstance(icon, str) or icon == ""):
+            fail(f"{path}: {name} icon must be an emoji or null")
+        theme = profile.get("theme")
+        if "theme" in profile and not isinstance(theme, (str, dict, type(None))):
+            fail(f"{path}: {name} theme must be a colour, a theme object, or null")
+        for key in ("shareTopApps", "syncTabs", "pinnedCollapsed", "default"):
+            if key in profile and not isinstance(profile[key], bool):
+                fail(f"{path}: {name} {key} must be true or false")
+        share_with = profile.get("shareDataWith")
+        if "shareDataWith" in profile and (not isinstance(share_with, str) or not share_with.strip()):
+            fail(f"{path}: {name} shareDataWith must be a profile name")
+        if share_with == name:
+            fail(f"{path}: {name} cannot share data with itself")
+        if profile.get("default") is True:
+            default_count += 1
+    if default_count > 1:
+        fail(f"{path}: only one profile can be the default")
+    return profiles
+
+
+def call_ardia(binary, method, params):
+    completed = subprocess.run(
+        [binary, "call", method, "--params", json.dumps(params), "--json"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        message = (completed.stderr or completed.stdout).strip() or f"ardia call {method} failed"
+        raise ArdiaError(completed.returncode, message)
+    text = completed.stdout.strip()
+    if not text:
+        return None
+    return json.loads(text)
+
+
+def index_by_name(profiles):
+    found = {}
+    for profile in profiles:
+        name = profile.get("name")
+        if name in found:
+            fail(f"Ardia has more than one profile named {name}")
+        found[name] = profile
+    return found
+
+
+def creation_order(manifest, existing_names):
+    remaining = list(manifest)
+    ordered = []
+    satisfied = set(existing_names)
+    while remaining:
+        ready = next(
+            (
+                profile
+                for profile in remaining
+                if profile.get("shareDataWith") is None or profile["shareDataWith"] in satisfied
+            ),
+            None,
+        )
+        if ready is None:
+            waiting = ", ".join(
+                f"{profile['name']} shares with {profile['shareDataWith']}" for profile in remaining
+            )
+            fail(f"shareDataWith names a profile that is not available: {waiting}")
+        ordered.append(ready)
+        remaining.remove(ready)
+        satisfied.add(ready["name"])
+    return ordered
+
+
+def changed_fields(spec, live, keys):
+    return {key: spec[key] for key in keys if key in spec and spec[key] != live.get(key)}
+
+
+def shares_with(live, profile_id):
+    shares = live.get("sharesDataWith") or []
+    if isinstance(shares, str):
+        return shares == profile_id
+    return profile_id in shares
+
+
+def desired_names(manifest, live_profiles):
+    declared = [profile["name"] for profile in manifest]
+    declared_set = set(declared)
+    extras = [profile["name"] for profile in live_profiles if profile["name"] not in declared_set]
+    return declared + extras
+
+
+def current_default_name(live_profiles):
+    for profile in live_profiles:
+        if profile.get("default") is True:
+            return profile.get("name")
+    return None
+
+
+def sync_profiles(binary, manifest, dry_run):
+    live_profiles = call_ardia(binary, "profiles.list", {})
+    if not isinstance(live_profiles, list):
+        fail("profiles.list returned an unexpected result")
+    by_name = index_by_name(live_profiles)
+    lines = []
+    prefix = "would " if dry_run else ""
+
+    for spec in creation_order(manifest, set(by_name)):
+        live = by_name.get(spec["name"])
+        if live is None:
+            lines.append(f"{prefix}create {spec['name']}")
+            if dry_run:
+                continue
+            params = {"name": spec["name"]}
+            if "color" in spec:
+                params["color"] = spec["color"]
+            if isinstance(spec.get("icon"), str):
+                params["icon"] = spec["icon"]
+            if "shareTopApps" in spec:
+                params["shareTopApps"] = spec["shareTopApps"]
+            share_with = spec.get("shareDataWith")
+            if share_with:
+                params["shareDataWith"] = by_name[share_with]["id"]
+            created = call_ardia(binary, "profiles.create", params)
+            if not isinstance(created, dict) or "id" not in created:
+                fail(f"profiles.create for {spec['name']} returned an unexpected result")
+            by_name[spec["name"]] = created
+            continue
+        share_with = spec.get("shareDataWith")
+        if share_with:
+            target = by_name.get(share_with)
+            target_id = None if target is None else target.get("id")
+            if target_id is None or not shares_with(live, target_id):
+                lines.append(
+                    f"{spec['name']} already exists; shareDataWith is only applied when the profile is created"
+                )
+        update = changed_fields(spec, live, UPDATE_KEYS)
+        if update:
+            fields = ", ".join(update)
+            lines.append(f"{prefix}update {spec['name']}: {fields}")
+            if not dry_run:
+                call_ardia(binary, "profiles.update", {"profile": live["id"], **update})
+                live.update(update)
+        look = changed_fields(spec, live, ("color", "theme"))
+        if look:
+            fields = ", ".join(look)
+            lines.append(f"{prefix}set look of {spec['name']}: {fields}")
+            if not dry_run:
+                call_ardia(binary, "profiles.setLook", {"profile": live["id"], **look})
+                live.update(look)
+
+    wanted_names = desired_names(manifest, live_profiles)
+    current_names = [profile["name"] for profile in live_profiles]
+    order_differs = wanted_names != current_names
+    if order_differs:
+        lines.append(f"{prefix}reorder profiles")
+        if not dry_run:
+            ordered_ids = [by_name[name]["id"] for name in wanted_names]
+            call_ardia(binary, "profiles.reorder", {"profiles": ordered_ids})
+
+    wanted_default = next((spec["name"] for spec in manifest if spec.get("default") is True), None)
+    if wanted_default and current_default_name(live_profiles) != wanted_default:
+        lines.append(f"{prefix}set default profile to {wanted_default}")
+        if not dry_run:
+            call_ardia(binary, "profiles.setDefault", {"profile": by_name[wanted_default]["id"]})
+
+    if not lines:
+        print("profiles already match")
+        return
+    print("\n".join(lines))
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Create and arrange Ardia profiles from a manifest.")
+    parser.add_argument("manifest", nargs="?", help="profile manifest (default: ~/.config/ardia/profiles.json)")
+    parser.add_argument("--dry-run", action="store_true", help="print the changes without applying them")
+    args = parser.parse_args()
+    path = manifest_path(args.manifest)
+    manifest = load_manifest(path)
+    try:
+        sync_profiles(ardia_binary(), manifest, args.dry_run)
+    except ArdiaError as error:
+        fail(str(error), error.status if error.status in (1, 2) else 1)
+
+
+if __name__ == "__main__":
+    main()

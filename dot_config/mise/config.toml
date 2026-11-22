@@ -1,0 +1,12 @@
+[tools]
+java = "26"
+node = "26"
+"npm:typescript" = "latest"
+"npm:typescript-language-server" = "latest"
+"npm:vscode-langservers-extracted" = "latest"
+rust-analyzer = "latest"
+terraform-ls = "latest"
+"vfox:tinnet/vfox-jdtls" = "latest"
+
+[settings]
+experimental = true

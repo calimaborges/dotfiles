@@ -14,6 +14,7 @@ option.wrap = true           -- wrap long lines visually
 option.linebreak = true      -- wrap at word boundaries
 option.breakindent = true    -- keep indent on wrapped lines
 option.termguicolors = true  -- 24-bit colors
+option.termsync = false      -- fix wezterm line lagging issue
 
 -- Indentation
 option.expandtab = true   -- spaces instead of tabs

@@ -1,0 +1,14 @@
+{
+  "$schema": "./config.schema.json",
+  "theme": null,
+  "settings": {
+    "newTabPosition": "nextToCurrent",
+    "shareTabsAcrossWindows": true,
+    "cleanUpInactiveTabsAfterMinutes": 720,
+    "glassTintWithTheme": true,
+    "glassTintAmount": 0.69,
+    "bookmarksBar": "newTab",
+    "appearance": "dark",
+    "pageFrame": 0
+  }
+}
