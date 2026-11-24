@@ -21,7 +21,7 @@ config.colors = {
 }
 config.term = "wezterm"
 config.window_decorations = "RESIZE"
-config.hide_tab_bar_if_only_one_tab = true
+config.hide_tab_bar_if_only_one_tab = false
 
 local projects_root = wezterm.home_dir .. "/projects"
 
@@ -146,14 +146,17 @@ wezterm.on("new-tab-button-click", function(window, pane, button)
 	return false
 end)
 
-local session_label_padding = "  "
-
 wezterm.on("update-status", function(window)
-	local session_label = session_label_padding .. window:active_workspace() .. session_label_padding
-	window:set_right_status(wezterm.format({
-		{ Foreground = { AnsiColor = "Green" } },
-		{ Text = session_label },
-	}))
+	local active = window:active_workspace()
+	local cells = {}
+	for session_number, name in ipairs(open_session_names()) do
+		local is_active = name == active
+		table.insert(cells, { Attribute = { Intensity = is_active and "Bold" or "Normal" } })
+		table.insert(cells, { Foreground = { AnsiColor = is_active and "Green" or "White" } })
+		table.insert(cells, { Text = " " .. session_number .. " " .. name .. " " })
+	end
+	window:set_left_status(wezterm.format(cells))
+	window:set_right_status("")
 end)
 
 local keys = {

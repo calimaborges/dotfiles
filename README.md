@@ -46,12 +46,15 @@ This repository is public. Never add files that contain secrets, keys, or tokens
 
 5. **Vicinae, Amethyst, and Thaw** (macOS). Allow Vicinae and Amethyst under System Settings > Privacy & Security > Accessibility. Open Thaw and grant Accessibility, then Menu Bar Layout Access when it asks; Screen Recording is optional. Quit and reopen Amethyst, which manages no windows until it restarts with the permission. Add Amethyst and Thaw under System Settings > General > Login Items. Vicinae registers itself.
 
-6. **Ardia.** Open Ardia, then write the schema files and create the profiles. Afterwards, set the password managers and the control settings by hand, as [Ardia](#ardia) explains.
+6. **Ardia.** Open Ardia, then write the schema files and create the profiles. Afterwards, set the password managers and the control settings by hand, as [Ardia](#ardia) explains. Install Floccus for every profile:
 
    ```sh
    ardia config init
    sync-ardia-profiles
+   sync-ardia-extensions
    ```
+
+   Quit and reopen Ardia after `sync-ardia-extensions`. If Floccus is still missing, run `sync-ardia-extensions --web-store` and click Add on each Web Store tab.
 
 7. **Journal.** Import your GPG secret key and clone the journal repository into `~/projects/personal/journal`.
 
@@ -72,7 +75,7 @@ This pulls the repository and applies it. WezTerm, Vicinae, and Ardia's `config.
 | Zsh | `exec zsh` |
 | mise | If `config.toml` changed, run `mise install` |
 | Neovim | Restart it. If `nvim-pack-lock.json` changed, run `:lua vim.pack.update(nil, { target = "lockfile" })` and confirm with `:write` |
-| Ardia | If `profiles.json` changed, run `sync-ardia-profiles` while Ardia is running |
+| Ardia | If `profiles.json` changed, run `sync-ardia-profiles` while Ardia is running. For Floccus on new machines or profiles, run `sync-ardia-extensions`, then quit and reopen Ardia |
 | Amethyst | Relaunch it |
 
 ### Push
@@ -86,6 +89,7 @@ Edits to managed files are already in the repository, because the files in `$HOM
 | Neovim plugin versions | `:lua vim.pack.update()` and `:write`, which rewrite `nvim-pack-lock.json` |
 | Ardia setting | `ardia config set KEY VALUE`, then `ardia config check` |
 | Ardia profile | Edit `profiles.json`, then run `sync-ardia-profiles` |
+| Ardia Floccus | Run `sync-ardia-extensions`, then quit and reopen Ardia |
 | Vicinae setting | Put it in `shared.json`. A setting changed in the Vicinae window stays on that computer |
 
 ```sh
@@ -145,6 +149,31 @@ The journal is one GPG-encrypted Markdown file per day, `YYYY-MM-DD.md.gpg`, in 
 
 `journal-edit` does not commit. Commit and push from Neovim with `<leader>gs` and `<leader>gp`.
 
+## VPN
+
+File: `~/.local/bin/vpn`. It needs `pass`, GnuPG, and [snx-rs](https://github.com/ancwrd1/snx-rs) (`snxctl` on `PATH`).
+
+This replaces the Emacs VPN command. The server, login type, username, and password live only in the pass entry `vpn` (override the name with `VPN_PASS_ENTRY`). The first line is the password. Leave it empty when the login type does not use one. Further lines are `key: value`:
+
+```
+server-name: vpn.example.com
+user-name: optional
+login-type: vpn_Example
+ike-version: 1
+```
+
+`server-name` and `login-type` are required. Other snx-rs options can be added the same way. `log-level`, `keychain`, and `mfa-code` are refused: logging stays off, the password is not copied into the OS keychain, and a one-time code is not stored. Create or change the entry with `pass edit vpn`. The password store is separate from this repository.
+
+`vpn connect` drops a tunnel that is already up, then connects. For an identity-provider login, snx-rs opens the browser itself. The command does not print the address, username, password, login type, or that URL. A password or MFA prompt is still shown. The tunnel stays up after the command returns.
+
+```sh
+vpn connect
+vpn status
+vpn disconnect
+```
+
+While `snxctl` is running, the command writes a mode `0600` config under the private temporary directory and overwrites that file before deleting it.
+
 ## Vicinae
 
 Files: `~/.config/vicinae/shared.json`, which Vicinae reloads on save, and `~/.config/vicinae/settings.json`.
@@ -176,7 +205,7 @@ No files. [Thaw](https://www.getthaw.app/) hides menu bar icons behind a click o
 
 ## Ardia
 
-Files: `~/.config/ardia/config.json`, `~/.config/ardia/profiles.json`, and `~/.local/bin/sync-ardia-profiles`.
+Files: `~/.config/ardia/config.json`, `~/.config/ardia/profiles.json`, `~/.local/bin/sync-ardia-profiles`, and `~/.local/bin/sync-ardia-extensions`.
 
 `config.json` holds the settings that differ from Ardia's defaults. Ardia reads it at launch and whenever it changes, and never writes it. `ardia config init` writes schema files beside it without overwriting it. Keep those schema files, and the Chromium profile in `~/Library/Application Support/com.ardia.browser`, out of this repository.
 
@@ -186,4 +215,4 @@ Settings that grant control (`cliControl`, custom search URLs, page engines) can
 
 Each profile's password manager is set by hand in Settings > Profiles > Passwords. Choose None, so Ardia does not offer to save or suggest passwords. Neither `config.json` nor `sync-ardia-profiles` can set it.
 
-Chromium's `PasswordManagerEnabled` policy is a separate switch that this repository does not install. It needs a configuration profile for `com.ardia.browser`, which `defaults write` does not provide. It turns off the save prompt and password suggestions in every profile, and leaves each profile's password manager and Apple Passwords unchanged.
+`sync-ardia-extensions` installs [Floccus](https://chromewebstore.google.com/detail/floccus-bookmarks-sync/fnaicdffflnofjppbagibeoednhnbjhg) for every profile. Ardia does not load Chromium platform policies (`ExtensionInstallForcelist` and a macOS configuration profile are ignored), so this script writes Chromium External Extensions JSON under `~/Library/Application Support/Chromium/External Extensions` and under Ardia's Chromium data dir. Quit and reopen Ardia after it runs. If Floccus is still missing, `sync-ardia-extensions --web-store` opens the Chrome Web Store page in each profile that lacks it so you can click Add. Floccus sync accounts still need configuring in each profile.

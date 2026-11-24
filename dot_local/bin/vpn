@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+import argparse
+import base64
+import os
+import pty
+import re
+import select
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+PASS_ENTRY = os.environ.get("VPN_PASS_ENTRY", "vpn")
+REQUIRED = ("server-name", "login-type")
+ALLOWED = {
+    "server-name",
+    "login-type",
+    "user-name",
+    "ike-version",
+    "tunnel-type",
+    "ignore-server-cert",
+    "ca-cert",
+    "password-factor",
+    "cert-type",
+    "cert-path",
+    "cert-id",
+    "cert-password",
+    "search-domains",
+    "ignore-search-domains",
+    "dns-servers",
+    "ignore-dns-servers",
+    "default-route",
+    "no-routing",
+    "add-routes",
+    "ignore-routes",
+    "no-dns",
+    "no-split-dns",
+    "if-name",
+    "ike-lifetime",
+    "ike-persist",
+    "no-keepalive",
+    "port-knock",
+    "set-routing-domains",
+    "client-mode",
+    "ip-lease-time",
+    "disable-ipv6",
+    "mtu",
+    "transport-type",
+    "allow-forwarding",
+    "tls-version-max",
+    "locale",
+}
+FORCED = (("log-level", "off"), ("keychain", "false"))
+SECRET_FIELDS = (
+    "server-name",
+    "user-name",
+    "login-type",
+    "cert-password",
+    "cert-id",
+    "cert-path",
+    "ca-cert",
+)
+SENSITIVE_LABELS = {
+    "server name",
+    "user name",
+    "login type",
+    "ip address",
+    "dns servers",
+    "search domains",
+    "interface",
+    "connection profile",
+    "ike sa initiator spi",
+    "ike sa responder spi",
+    "inbound esp spi",
+    "outbound esp spi",
+    "inbound esp encryption",
+    "outbound esp encryption",
+    "inbound esp authentication",
+    "outbound esp authentication",
+    "server address",
+    "server ip",
+    "internal ca fingerprint",
+}
+EXACT_LINES = {
+    "Application terminated due to a signal",
+}
+URL = re.compile(r"https?://\S+")
+IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+CONNECTION_LINE = re.compile(r"(?i)^(connected to|connecting to|disconnected from)\b")
+SNXCTL_COMMANDS = {
+    "connect": "reconnect",
+    "disconnect": "disconnect",
+    "status": "status",
+}
+
+
+def fail(message, status=1):
+    print(message, file=sys.stderr)
+    raise SystemExit(status)
+
+
+def prepare_gpg_tty():
+    if os.environ.get("GPG_TTY"):
+        return
+    try:
+        os.environ["GPG_TTY"] = os.ttyname(sys.stdin.fileno())
+    except OSError:
+        return
+
+
+def read_pass_entry(name):
+    if not shutil.which("pass"):
+        fail("vpn: pass not found")
+    result = subprocess.run(["pass", "show", name], capture_output=True, check=False)
+    if result.returncode != 0:
+        error = result.stderr.decode(errors="replace")
+        if "is not in the password store" in error:
+            fail("vpn: pass entry is missing")
+        if "gpg" in error.lower():
+            fail("vpn: could not decrypt the pass entry")
+        fail("vpn: could not read the pass entry")
+    return result.stdout.decode()
+
+
+def parse_entry(text):
+    lines = text.splitlines()
+    password = lines[0] if lines else ""
+    fields = {}
+    for line in lines[1:]:
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            fail("vpn: pass entry has a line without a field name")
+        key, value = line.split(":", 1)
+        if value.startswith(" "):
+            value = value[1:]
+        if not re.fullmatch(r"[a-z0-9-]+", key):
+            fail("vpn: pass entry has an invalid field name")
+        if key not in ALLOWED:
+            fail(f"vpn: pass entry has an unsupported field: {key}")
+        if key in fields:
+            fail("vpn: pass entry repeats a field")
+        fields[key] = value
+    for key in REQUIRED:
+        if not fields.get(key):
+            fail(f"vpn: pass entry is missing {key}")
+    return password, fields
+
+
+def secret_values(password, fields):
+    values = [password] if password else []
+    values.extend(fields[key] for key in SECRET_FIELDS if fields.get(key))
+    values.sort(key=len, reverse=True)
+    return values
+
+
+def redact(text, secrets):
+    cleaned = URL.sub("", text)
+    for secret in secrets:
+        cleaned = cleaned.replace(secret, "")
+    return cleaned
+
+
+def present(text, secrets):
+    cleaned = redact(text, secrets)
+    if not cleaned.strip():
+        return ""
+    newline = "\n" if cleaned.endswith("\n") else ""
+    body = cleaned[:-1] if newline else cleaned
+    stripped = body.strip()
+    if "following URL" in stripped or URL.search(body):
+        return ""
+    if CONNECTION_LINE.match(stripped):
+        return ""
+    label = ""
+    value = None
+    if ":" in stripped:
+        label, value = stripped.split(":", 1)
+        label = label.strip().lower()
+        if label in SENSITIVE_LABELS and value.strip():
+            return ""
+    if value is not None and not value.strip() and (stripped.endswith(":") or body.endswith(": ")):
+        original = text[:-1] if text.endswith("\n") else text
+        original_value = original.split(":", 1)[1] if ":" in original else ""
+        if original_value.strip():
+            return ""
+        return body + newline
+    if stripped in EXACT_LINES or stripped.startswith(("MFA pending:", "Error:")):
+        return IPV4.sub("", stripped).rstrip() + "\n"
+    return ""
+
+
+def write_config(directory, password, fields):
+    lines = []
+    if password:
+        encoded = base64.b64encode(password.encode()).decode()
+        lines.append(f"password={encoded}")
+    for key, value in fields.items():
+        if value:
+            lines.append(f"{key}={value}")
+    for key, value in FORCED:
+        lines.append(f"{key}={value}")
+    path = directory / "config"
+    path.write_text("\n".join(lines) + "\n")
+    path.chmod(0o600)
+    return path
+
+
+def wipe(path):
+    if path is None or not path.is_file():
+        return
+    size = path.stat().st_size
+    with path.open("r+b") as handle:
+        handle.write(os.urandom(max(size, 1)))
+        handle.flush()
+        os.fsync(handle.fileno())
+    path.unlink()
+
+
+def pump(master, process, secrets):
+    pending = ""
+    raw = []
+
+    def take(text):
+        raw.append(text)
+        shown = present(text, secrets)
+        if shown:
+            sys.stderr.write(shown)
+            sys.stderr.flush()
+
+    while True:
+        if process.poll() is not None and not select.select([master], [], [], 0)[0]:
+            break
+        try:
+            ready, _, _ = select.select([master], [], [], 0.25)
+        except (OSError, ValueError):
+            break
+        if not ready:
+            continue
+        try:
+            chunk = os.read(master, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        pending += chunk.decode("utf-8", "replace")
+        while "\n" in pending:
+            line, pending = pending.split("\n", 1)
+            take(line + "\n")
+        if pending.endswith(": ") or (pending.endswith(":") and "\n" not in pending):
+            take(pending)
+            pending = ""
+    if pending:
+        take(pending)
+    return "".join(raw)
+
+
+def run_snxctl(config, command, secrets):
+    snxctl = shutil.which("snxctl")
+    if not snxctl:
+        fail("vpn: snxctl not found")
+    master, slave = pty.openpty()
+    try:
+        process = subprocess.Popen(
+            [snxctl, command, "-c", str(config)],
+            stdin=sys.stdin,
+            stdout=slave,
+            stderr=slave,
+            close_fds=True,
+        )
+    except OSError:
+        os.close(slave)
+        os.close(master)
+        raise
+    os.close(slave)
+    try:
+        return pump(master, process, secrets), process.wait()
+    finally:
+        os.close(master)
+
+
+def summary(command, returncode, raw):
+    if returncode != 0:
+        return "vpn: failed"
+    if command == "disconnect":
+        return "vpn: disconnected"
+    if command == "status":
+        if "Connecting in progress" in raw or "MFA pending:" in raw:
+            return "vpn: connecting"
+        if "Connected since:" in raw or re.search(r"(?m)^Connected to ", raw) or re.search(r"(?m)^Connected$", raw):
+            return "vpn: connected"
+        if "Disconnected" in raw:
+            return "vpn: disconnected"
+        return "vpn: unknown"
+    return "vpn: connected"
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(prog="vpn", description="Connect, disconnect, or query the VPN.")
+    parser.add_argument("command", choices=sorted(SNXCTL_COMMANDS))
+    args = parser.parse_args(argv)
+    prepare_gpg_tty()
+    password, fields = parse_entry(read_pass_entry(PASS_ENTRY))
+    secrets = secret_values(password, fields)
+    directory = Path(tempfile.mkdtemp(prefix="x."))
+    config = None
+    try:
+        config = write_config(directory, password, fields)
+        raw, returncode = run_snxctl(config, SNXCTL_COMMANDS[args.command], secrets)
+    finally:
+        password = ""
+        wipe(config)
+        shutil.rmtree(directory, ignore_errors=True)
+    print(summary(args.command, returncode, raw))
+    return returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

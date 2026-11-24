@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+FLOCCUS_ID = "fnaicdffflnofjppbagibeoednhnbjhg"
+FLOCCUS_UPDATE_URL = "https://clients2.google.com/service/update2/crx"
+
+EXTERNAL_EXTENSION = {
+    "external_update_url": FLOCCUS_UPDATE_URL,
+}
+
+
+def fail(message):
+    print(message, file=sys.stderr)
+    sys.exit(1)
+
+
+def external_extension_dirs():
+    home = Path.home()
+    support = home / "Library" / "Application Support"
+    return [
+        support / "Chromium" / "External Extensions",
+        support / "com.ardia.browser" / "Chromium" / "External Extensions",
+    ]
+
+
+def write_floccus(dry_run):
+    body = json.dumps(EXTERNAL_EXTENSION, indent=2) + "\n"
+    written = []
+    for directory in external_extension_dirs():
+        path = directory / f"{FLOCCUS_ID}.json"
+        if path.is_file() and path.read_text() == body:
+            written.append((path, "unchanged"))
+            continue
+        if dry_run:
+            written.append((path, "would write"))
+            continue
+        directory.mkdir(parents=True, exist_ok=True)
+        path.write_text(body)
+        written.append((path, "wrote"))
+    return written
+
+
+def list_profiles(binary):
+    import subprocess
+
+    result = subprocess.run(
+        [binary, "call", "profiles.list", "--json"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        fail(result.stderr.strip() or "profiles.list failed; is Ardia running?")
+    profiles = json.loads(result.stdout)
+    if not isinstance(profiles, list):
+        fail("profiles.list returned an unexpected result")
+    return profiles
+
+
+def install_via_ardia(binary, dry_run):
+    import subprocess
+
+    profiles = list_profiles(binary)
+    lines = []
+    for profile in profiles:
+        profile_id = profile["id"]
+        name = profile.get("name", profile_id)
+        listed = subprocess.run(
+            [binary, "call", "extensions.list", "-p", f"profile={profile_id}", "--json"],
+            capture_output=True,
+            text=True,
+        )
+        if listed.returncode != 0:
+            fail(listed.stderr.strip() or f"extensions.list failed for {name}")
+        extensions = json.loads(listed.stdout)
+        ids = {ext.get("id") for ext in extensions if isinstance(ext, dict)}
+        if FLOCCUS_ID in ids:
+            lines.append(f"ok {name}: Floccus already installed")
+            continue
+        if dry_run:
+            lines.append(f"would open Web Store for {name}")
+            continue
+        installed = subprocess.run(
+            [
+                binary,
+                "call",
+                "extensions.install",
+                "-p",
+                f"profile={profile_id}",
+                "-p",
+                f"webStore={FLOCCUS_ID}",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if installed.returncode != 0:
+            fail(installed.stderr.strip() or f"extensions.install failed for {name}")
+        payload = json.loads(installed.stdout)
+        if payload.get("installed"):
+            lines.append(f"ok {name}: Floccus installed")
+        else:
+            lines.append(f"waiting {name}: Add Floccus on the Web Store tab")
+    return lines
+
+
+def ardia_binary():
+    path = os.environ.get("ARDIA") or "ardia"
+    return path
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Install Floccus for every Ardia profile (External Extensions + optional Web Store)."
+    )
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--web-store",
+        action="store_true",
+        help="open the Chrome Web Store install page in each profile that still lacks Floccus",
+    )
+    args = parser.parse_args()
+
+    for path, status in write_floccus(args.dry_run):
+        print(f"{status}: {path}")
+
+    if args.web_store:
+        for line in install_via_ardia(ardia_binary(), args.dry_run):
+            print(line)
+    elif not args.dry_run:
+        print("Quit and reopen Ardia so External Extensions are picked up.")
+        print("If Floccus is still missing, run: sync-ardia-extensions --web-store")
+
+
+if __name__ == "__main__":
+    main()
