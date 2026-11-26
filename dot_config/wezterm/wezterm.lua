@@ -36,6 +36,7 @@ local function session_directory(workspace)
 end
 
 local function list_project_sessions()
+    local chezmoi_directory = wezterm.home_dir .. "/.local/share/chezmoi"
 	local _, found_directories = wezterm.run_child_process({
 		"find",
 		projects_root,
@@ -53,6 +54,7 @@ local function list_project_sessions()
 	for project_directory in found_directories:gmatch("[^\n]+") do
 		table.insert(sessions, { id = project_directory, label = session_name(project_directory) })
 	end
+    table.insert(sessions, { id = chezmoi_directory, label = "chezmoi" })
 	table.sort(sessions, function(first, second)
 		return first.label < second.label
 	end)
